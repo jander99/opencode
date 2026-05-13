@@ -3,6 +3,7 @@ import {
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
+  sanitizeCodexRequestBody,
   type IdTokenClaims,
 } from "../../src/plugin/codex"
 
@@ -118,6 +119,56 @@ describe("plugin.codex", () => {
           refresh_token: "rt",
         }),
       ).toBe("acc-123")
+    })
+  })
+
+  describe("sanitizeCodexRequestBody", () => {
+    test("strips text.verbosity from a Responses API body", () => {
+      const body = JSON.stringify({ model: "gpt-5.4", text: { verbosity: "low" } })
+      const result = sanitizeCodexRequestBody(body)
+      expect(JSON.parse(result as string)).toEqual({ model: "gpt-5.4" })
+    })
+
+    test("deletes text key when text.verbosity was the only key", () => {
+      const body = JSON.stringify({ text: { verbosity: "low" } })
+      const result = sanitizeCodexRequestBody(body)
+      const parsed = JSON.parse(result as string)
+      expect(parsed.text).toBeUndefined()
+    })
+
+    test("preserves text.format when it coexists with text.verbosity", () => {
+      const body = JSON.stringify({ text: { verbosity: "low", format: { type: "json_object" } } })
+      const result = sanitizeCodexRequestBody(body)
+      expect(JSON.parse(result as string)).toEqual({ text: { format: { type: "json_object" } } })
+    })
+
+    test("preserves reasoning.effort", () => {
+      const body = JSON.stringify({ text: { verbosity: "low" }, reasoning: { effort: "medium" } })
+      const result = sanitizeCodexRequestBody(body)
+      expect(JSON.parse(result as string)).toEqual({ reasoning: { effort: "medium" } })
+    })
+
+    test("preserves reasoning.summary", () => {
+      const body = JSON.stringify({ text: { verbosity: "low" }, reasoning: { summary: "auto" } })
+      const result = sanitizeCodexRequestBody(body)
+      expect(JSON.parse(result as string)).toEqual({ reasoning: { summary: "auto" } })
+    })
+
+    test("returns body unchanged when text.verbosity is absent", () => {
+      const body = JSON.stringify({ model: "gpt-5.4", max_tokens: 1000 })
+      expect(sanitizeCodexRequestBody(body)).toBe(body)
+    })
+
+    test("returns body unchanged for null", () => {
+      expect(sanitizeCodexRequestBody(null)).toBeNull()
+    })
+
+    test("returns body unchanged for non-JSON string", () => {
+      expect(sanitizeCodexRequestBody("not-json")).toBe("not-json")
+    })
+
+    test("returns body unchanged for empty string", () => {
+      expect(sanitizeCodexRequestBody("")).toBe("")
     })
   })
 })

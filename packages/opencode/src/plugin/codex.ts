@@ -95,6 +95,20 @@ export function extractAccountId(tokens: TokenResponse): string | undefined {
   return undefined
 }
 
+export function sanitizeCodexRequestBody(body: RequestInit["body"]): RequestInit["body"] {
+  if (typeof body !== "string") return body
+  try {
+    const parsed = JSON.parse(body)
+    if (parsed?.text?.verbosity !== undefined) {
+      delete parsed.text.verbosity
+      if (Object.keys(parsed.text).length === 0) delete parsed.text
+    }
+    return JSON.stringify(parsed)
+  } catch {
+    return body
+  }
+}
+
 function buildAuthorizeUrl(redirectUri: string, pkce: PkceCodes, state: string): string {
   const params = new URLSearchParams({
     response_type: "code",
@@ -475,13 +489,13 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               requestInput instanceof URL
                 ? requestInput
                 : new URL(typeof requestInput === "string" ? requestInput : requestInput.url)
-            const url =
+            const isCodexRoute =
               parsed.pathname.includes("/v1/responses") || parsed.pathname.includes("/chat/completions")
-                ? new URL(CODEX_API_ENDPOINT)
-                : parsed
+            const url = isCodexRoute ? new URL(CODEX_API_ENDPOINT) : parsed
 
             return fetch(url, {
               ...init,
+              body: isCodexRoute ? sanitizeCodexRequestBody(init?.body) : init?.body,
               headers,
             })
           },
